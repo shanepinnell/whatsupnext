@@ -382,17 +382,17 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 
 ## API contract (the App ↔ the Service)
 
-All authenticated endpoints use `Authorization: Bearer <api_token>`;
+All authenticated endpoints use `Authorization: Bearer <api_key>`;
 everything is under `/api/v1/`.
 
 - **Pairing Code flow (public, unauthenticated)**:
   - `POST /devices/pairing_codes` → creates a pending `Device`, returns
     `{device_id, code, expires_at, poll_interval_seconds}`.
   - `GET /devices/:device_id/pairing_status` → `{status: "pending"}` until
-    claimed, then `{status: "paired", api_token, room: {...}}`.
+    claimed, then `{status: "paired", api_key, room: {...}}`.
 - **Zero-Touch flow (public, token-based)**:
   - `POST /devices/mdm_register` — body `{mdm_token, device_identifier}`
-    (from Managed App Configuration) → `{api_token, room: {...}}`
+    (from Managed App Configuration) → `{api_key, room: {...}}`
     immediately, no polling.
 - **Ongoing operation (authenticated)**:
   - `GET /rooms/current` — the main 1-minute baseline poll. Returns room
@@ -563,7 +563,7 @@ the TV.
 | `device_identifier` | UUID | App-generated on first launch |
 | `room_id` | FK, nullable | null until paired |
 | `status` | enum | `pending` / `paired` / `revoked` |
-| `api_token` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage |
+| `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage |
 | `apns_token` | string, nullable | |
 | `mdm_device_id` | string, nullable | non-null ⟺ paired via MDM — see "no `paired_via`" below |
 | `pairing_code` | string, nullable | |
