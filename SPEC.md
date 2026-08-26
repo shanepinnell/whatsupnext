@@ -100,6 +100,18 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   against the Service's OIDC client, they're in.
 - Replaces Rails 8's built-in password-based auth generator. Session model
   concept is kept; `password_digest` is not used.
+- **Decision: break-glass/bootstrap access, scoped to OIDC configuration
+  only.** A single emergency credential — not a `User` row, not
+  self-service — exists independent of whether OIDC is currently
+  configured, covering both "no OIDC set up yet" and "the configured IDP
+  is unreachable/broken." It unlocks *only* the OIDC settings screen;
+  nothing else in the admin UI (rooms, buildings, devices, other
+  configuration) is reachable through it. Keeps a leaked/brute-forced
+  break-glass credential's blast radius to "can change how login works,"
+  not "has full admin access" — matching the actual failure this path
+  exists to fix. No password-reset flow, no email: the credential lives
+  in ENV like other deploy-time secrets (see `service/CLAUDE.md`) and is
+  rotated by changing the env var, not through the app.
 
 ### MDM / device management (of the App, on the Apple TV)
 
