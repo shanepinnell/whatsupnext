@@ -91,7 +91,11 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 - **Mechanism**: OmniAuth + a generic **OpenID Connect** strategy (not
   provider-specific gems) — one integration covers Google Workspace,
   Microsoft Entra ID, Okta, Auth0, etc. Each deployed instance configures
-  **one OIDC provider** via env vars (client id/secret/issuer URL).
+  **one OIDC provider** via env vars (client id/secret/issuer URL), plus
+  `SERVICE_HOST` (the Service's own public host[:port]) — the OIDC
+  strategy needs it to construct the callback `redirect_uri`, since
+  `omniauth_openid_connect` requires that value explicitly and won't
+  derive it from the request.
 - **Provisioning**: **JIT (just-in-time)** — a `User` record is created
   automatically on first successful OIDC login. No allowlist, no
   pre-created users.
