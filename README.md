@@ -27,4 +27,4 @@ specification.
 
 ## License
 
-TBD.
+[MIT](LICENSE)
