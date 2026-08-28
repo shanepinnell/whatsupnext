@@ -22,6 +22,11 @@ for the actual product architecture, data model, and API contract, and
 - **Strict TDD, across every component**: a failing test precedes any
   implementation code, no exceptions. See each component's own
   `CLAUDE.md` for its specific testing framework.
+  - **Exception: views/UI-layer markup.** Templates (ERB, JSX, etc.) and
+    their rendered output aren't TDD'd — no assert_select/system-test
+    coverage for markup, routing-through-a-view, or button targets.
+    Strict TDD still applies to everything else: models, controllers,
+    business logic.
 - **Prefer built-in/idiomatic generators and tooling** for scaffolding
   over hand-writing files from scratch, where the language/framework
   provides them.
