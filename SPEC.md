@@ -509,14 +509,17 @@ that ambiguous.
 **UI note — progressive disambiguation when displaying a room's
 identity** (admin UI room lists/pickers; not the App's own self-display,
 which always shows just its one paired room): show only as much of the
-`Building → Floor → Room` hierarchy as is actually needed to disambiguate
-given the current data shape, not always the full path. E.g. "Everest"
-alone is enough when there's only one `Building` with only one `Floor`,
-since no duplicate is structurally possible (per the `floor_id` + `name`
-uniqueness above); once a building has multiple floors, prefix with the
-floor ("Floor 3 → Everest"); once a site has multiple buildings, prefix
-with the building too ("Bldg A → Floor 3 → Everest"). See Open questions
-below re: whether `Site` context ever needs to be shown too.
+`Site → Building → Floor → Room` hierarchy as is actually needed to
+disambiguate given the current data shape, not always the full path.
+E.g. "Everest" alone is enough when there's only one `Site` with only one
+`Building` with only one `Floor`, since no duplicate is structurally
+possible (per the `floor_id` + `name` uniqueness above); once a building
+has multiple floors, prefix with the floor ("Floor 3 → Everest"); once a
+site has multiple buildings, prefix with the building too ("Bldg A →
+Floor 3 → Everest"); once the organization has multiple sites, prefix
+with the site too ("HQ → Bldg A → Floor 3 → Everest"). The rule is fully
+recursive all the way to `Site` — a level's prefix is added only once
+that level's own collision becomes structurally possible.
 
 The Service supports exporting and re-importing the full
 `Organization`/`Site`/`Building`/`Floor`/`Room` hierarchy from the admin
@@ -665,14 +668,6 @@ paired `Device`.
   credentials model itself (an `EmergencyNotificationSource`-type model —
   not yet designed even for InformaCast; `LogEntry` only covers recording
   the alert event, not how the Service authenticates to the vendor).
-- Room-identity display disambiguation (see `Room`'s UI note above): the
-  described rule shows `Building`/`Floor` context only when a duplicate
-  room name is structurally possible *within a `Site`*. It doesn't cover
-  cross-`Site` duplicates — e.g. two different single-building,
-  single-floor sites each naming a room "Everest." Open whether `Site`
-  context should ever be shown for that case, or whether it's always
-  safe to assume the UI displaying this list is already scoped to one
-  `Site`.
 
 ## Repository layout
 
