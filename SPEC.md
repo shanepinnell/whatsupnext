@@ -634,12 +634,14 @@ is only created when the reported status differs from
 `calendar_sync` `LogEntry` for that `CalendarSource` — no separate status
 column on `CalendarSource` itself, to avoid the same
 two-sources-of-truth problem avoided elsewhere in this schema).
-`CalendarSource.last_synced_at`, by contrast, **is** updated on every
-successful report, not just transitions — status answers "is it
-currently broken," `last_synced_at` answers "how fresh is this," and
-transition-only logging can only give you the first one (a long
-unbroken streak of successful pings, or a device that's gone silent
-entirely, would look identical in the log otherwise).
+`CalendarSource.last_reported_at`, by contrast, is updated on every
+report (success or failure), not just transitions — status answers "is
+it currently broken," `last_reported_at` (which doubles as
+last-successful-sync time when status is `ok`, per the `CalendarSource`
+section above) answers "how fresh is this," and transition-only logging
+can only give you the first one (a long unbroken streak of successful
+pings, or a device that's gone silent entirely, would look identical in
+the log otherwise).
 
 **No `EmergencyAlertTarget` model** — targeting is the vendor's
 responsibility, not ours (see Emergency Notifications above). When a
