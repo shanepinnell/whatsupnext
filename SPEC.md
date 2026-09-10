@@ -104,18 +104,33 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   against the Service's OIDC client, they're in.
 - Replaces Rails 8's built-in password-based auth generator. Session model
   concept is kept; `password_digest` is not used.
+- **Fail fast at boot if OIDC isn't configured.** `OIDC_ISSUER`/
+  `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` are read via `ENV.fetch`, not
+  plain `ENV[]` — a deploy missing any of them refuses to boot with a
+  clear error, rather than booting successfully and only failing later,
+  confusingly, the first time someone tries to sign in. An unconfigured
+  instance is an ops/deploy problem to fix directly (set the env vars,
+  redeploy), not something the app should work around.
 - **Decision: break-glass/bootstrap access, scoped to OIDC configuration
-  only.** A single emergency credential — not a `User` row, not
-  self-service — exists independent of whether OIDC is currently
-  configured, covering both "no OIDC set up yet" and "the configured IDP
-  is unreachable/broken." It unlocks *only* the OIDC settings screen;
-  nothing else in the admin UI (rooms, buildings, devices, other
-  configuration) is reachable through it. Keeps a leaked/brute-forced
-  break-glass credential's blast radius to "can change how login works,"
-  not "has full admin access" — matching the actual failure this path
-  exists to fix. No password-reset flow, no email: the credential lives
-  in ENV like other deploy-time secrets (see `service/CLAUDE.md`) and is
-  rotated by changing the env var, not through the app.
+  only, for one specific failure: OIDC is configured but the IDP is
+  unreachable/broken.** A single emergency credential — not a `User`
+  row, not self-service — exists independent of whether the app can
+  currently reach the IDP, so an admin gets back in even when the
+  provider itself is down. It unlocks *only* a read-only OIDC settings
+  status screen (configured issuer/client id, never the secret) —
+  useful for confirming the deployed config looks right while
+  diagnosing an IDP-side outage; it does not let you edit OIDC settings
+  through the app, since `omniauth_openid_connect` only reads its
+  config once at boot from `ENV`, matching its own documented usage —
+  changing settings still means editing `ENV` and redeploying, same as
+  initial setup. Nothing else in the admin UI (rooms, buildings,
+  devices, other configuration) is reachable through it. Keeps a
+  leaked/brute-forced break-glass credential's blast radius to "can
+  view OIDC status," not "has full admin access" — matching the actual
+  failure this path exists to fix. No password-reset flow, no email:
+  the credential lives in ENV like other deploy-time secrets (see
+  `service/CLAUDE.md`) and is rotated by changing the env var, not
+  through the app.
 
 ### MDM / device management (of the App, on the Apple TV)
 
