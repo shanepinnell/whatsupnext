@@ -447,6 +447,15 @@ instance — this is not a multi-tenancy mechanism, it's naming the single
 tenant explicitly rather than leaving it implicit (see Product shape/
 goals: no multi-tenancy at the Service level, ever). `has_many :sites`.
 
+**Bootstrap**: a freshly-deployed instance has no `Organization` row yet.
+The root route (`OrganizationsController#show`) detects this and renders
+a welcome/setup form (just `name`) instead of erroring — no separate
+"who's allowed to bootstrap" check, since the same no-authorization
+model applies (see Authentication): whoever can complete OIDC login is
+already trusted. `edit`/`update` exist as a settings screen for changing
+the name and `support_information` after the fact; `create` (bootstrap
+only) stays name-only by design, to keep first-run setup minimal.
+
 ### `Site` (`belongs_to :organization`)
 
 | Field | Type | Notes |
