@@ -110,27 +110,11 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   clear error, rather than booting successfully and only failing later,
   confusingly, the first time someone tries to sign in. An unconfigured
   instance is an ops/deploy problem to fix directly (set the env vars,
-  redeploy), not something the app should work around.
-- **Decision: break-glass/bootstrap access, scoped to OIDC configuration
-  only, for one specific failure: OIDC is configured but the IDP is
-  unreachable/broken.** A single emergency credential — not a `User`
-  row, not self-service — exists independent of whether the app can
-  currently reach the IDP, so an admin gets back in even when the
-  provider itself is down. It unlocks *only* a read-only OIDC settings
-  status screen (configured issuer/client id, never the secret) —
-  useful for confirming the deployed config looks right while
-  diagnosing an IDP-side outage; it does not let you edit OIDC settings
-  through the app, since `omniauth_openid_connect` only reads its
-  config once at boot from `ENV`, matching its own documented usage —
-  changing settings still means editing `ENV` and redeploying, same as
-  initial setup. Nothing else in the admin UI (rooms, buildings,
-  devices, other configuration) is reachable through it. Keeps a
-  leaked/brute-forced break-glass credential's blast radius to "can
-  view OIDC status," not "has full admin access" — matching the actual
-  failure this path exists to fix. No password-reset flow, no email:
-  the credential lives in ENV like other deploy-time secrets (see
-  `service/CLAUDE.md`) and is rotated by changing the env var, not
-  through the app.
+  redeploy), not something the app should work around. The same applies
+  if OIDC is configured but the IDP itself becomes unreachable/broken at
+  runtime: an ops-visible failure to fix at the deploy layer (logs,
+  monitoring, restoring the IDP), not something the app provides its own
+  in-app bypass for — no break-glass/bootstrap credential exists.
 
 ### MDM / device management (of the App, on the Apple TV)
 
