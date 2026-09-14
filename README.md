@@ -21,9 +21,11 @@ infrastructure yourself, at [whatsupnext.io](https://whatsupnext.io).
 
 ## Status
 
-This project is in the design/specification phase — no code has been
-written yet. See [`SPEC.md`](SPEC.md) for the full technical
-specification.
+Early. The Service (Rails backend) has admin login (OIDC), the base
+data model, and CRUD for the physical hierarchy (sites/buildings/
+floors/rooms); device pairing/management isn't built yet. The App
+(tvOS) hasn't been started beyond repo setup. See [`SPEC.md`](SPEC.md)
+for the full technical specification.
 
 ## License
 
