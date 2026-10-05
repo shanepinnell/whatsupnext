@@ -646,7 +646,7 @@ the TV.
 | Field | Type | Notes |
 |---|---|---|
 | `device_identifier` | UUID | App-generated on first launch |
-| `name` | string, nullable | the Apple TV's own device name as reported by tvOS, sent by the App — never admin-edited. Not unique (several TVs may keep a default name); admin UI falls back to "Apple TV" when blank. Device lists sort by it, blank last |
+| `name` | string, required, default "Apple TV" | the Apple TV's own device name as reported by tvOS, sent by the App — never admin-edited. Defaults to "Apple TV" when the App sends none or a blank one. Not unique (several TVs may keep the default). Device lists sort by it |
 | `room_id` | FK, nullable | null until paired |
 | `status` | enum | `pending` / `paired` / `revoked` |
 | `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage. Generated at first `pairing_status` delivery, not at claim; `api_key_digest` present ⟺ delivered. Null while a claimed device awaits its first poll |
