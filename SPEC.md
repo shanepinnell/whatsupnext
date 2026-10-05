@@ -418,6 +418,12 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 All authenticated endpoints use `Authorization: Bearer <api_key>`;
 everything else is under `/api/v1/`.
 
+Error responses carry a JSON body `{error: "<code>"}` — a stable,
+machine-readable snake_case code the App maps to its own on-screen
+wording; never human-readable prose from the Service, and never a
+stack trace or validation dump. Codes are part of the contract: add
+new ones freely, never rename or repurpose an existing one.
+
 - **Service address check (public, unauthenticated)**:
   - `GET /up` (outside `/api/v1/`) — Rails' built-in health check; `200`
     when the Service is up. Used by the App to validate a typed-in
@@ -436,8 +442,9 @@ everything else is under `/api/v1/`.
     (e.g. the App refreshing a code before it expires) never accumulate
     orphaned pending devices. `poll_interval_seconds` is 5.
     A `device_identifier` belonging to a paired or revoked device gets
-    `409 Conflict` and no code — un-pairing is an admin action, never
-    triggered by an unauthenticated request.
+    `409 Conflict` with `{error: "device_paired"}` or
+    `{error: "device_revoked"}` respectively, and no code — un-pairing
+    is an admin action, never triggered by an unauthenticated request.
   - `GET /devices/pairing_status` with header
     `X-Device-Identifier: <device_identifier>` → `{status: "pending"}`
     until claimed, then `{status: "paired", api_key, room: {...}}`
