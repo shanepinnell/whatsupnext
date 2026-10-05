@@ -668,6 +668,14 @@ the TV.
   one expires while still on the pairing screen, so whoever's setting it
   up never sees an expiry error. Unique among unexpired codes —
   regenerated on collision.
+- **Claiming**: an admin enters the code shown on the TV and picks a
+  room; the matching pending device with an unexpired code becomes
+  `paired` (`room_id`, `paired_at` set) and its `pairing_code` /
+  `pairing_code_expires_at` are cleared, so a code can never be claimed
+  twice. No `api_key` is generated here (see `api_key`). A code that
+  matches no pending unexpired device — or, via a generation race, more
+  than one — is rejected as invalid; an ambiguous code never pairs
+  either device.
 
 ### `LogEntry`
 
