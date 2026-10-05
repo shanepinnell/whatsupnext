@@ -427,8 +427,9 @@ everything else is under `/api/v1/`.
   - Precondition: the App already knows the Service's base URL —
     entered once on the TV (see MDM / device management above), since
     no MDM config is present on this path.
-  - `POST /devices/pairing_codes` — body `{device_identifier}` (the
-    App's own UUID, see `Device`) → issues a fresh code and returns
+  - `POST /devices/pairing_codes` with header
+    `X-Device-Identifier: <device_identifier>` (the App's own UUID, see
+    `Device`), no body → issues a fresh code and returns
     `{code, expires_at, poll_interval_seconds}`. Creates a pending
     `Device` if none exists for that `device_identifier`; otherwise
     reissues a new code on the existing pending one, so re-requests
@@ -437,12 +438,18 @@ everything else is under `/api/v1/`.
     A `device_identifier` belonging to a paired or revoked device gets
     `409 Conflict` and no code — un-pairing is an admin action, never
     triggered by an unauthenticated request.
-  - `GET /devices/:device_identifier/pairing_status` →
-    `{status: "pending"}` until claimed, then
-    `{status: "paired", api_key, room: {...}}`. Keyed on the App's
-    random UUID, never the sequential DB id: this endpoint is
-    unauthenticated and hands out the `api_key`, so its key must be
-    unguessable.
+  - `GET /devices/pairing_status` with header
+    `X-Device-Identifier: <device_identifier>` → `{status: "pending"}`
+    until claimed, then `{status: "paired", api_key, room: {...}}`
+    exactly once (see `Device.api_key`); later polls return
+    `{status: "paired", room: {...}}` with no `api_key`. Follows the
+    OAuth 2.0 Device Authorization Grant (RFC 8628) pattern: this
+    endpoint is unauthenticated and hands out the device's credential, so
+    (a) the identifier rides in a header, never the URL path, where
+    proxies/CDNs/Rails would write it to access logs, and (b) the
+    `api_key` is delivered once, so a leaked identifier after delivery
+    yields nothing. A device that loses that one response must be
+    un-paired and re-paired by an admin.
 - **Zero-Touch flow (public, token-based)**:
   - `POST /devices/mdm_register` — body `{mdm_token, device_identifier}`
     (from Managed App Configuration) → `{api_key, room: {...}}`
@@ -628,7 +635,7 @@ the TV.
 | `device_identifier` | UUID | App-generated on first launch |
 | `room_id` | FK, nullable | null until paired |
 | `status` | enum | `pending` / `paired` / `revoked` |
-| `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage |
+| `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage. Generated at first `pairing_status` delivery, not at claim; `api_key_digest` present ⟺ delivered. Null while a claimed device awaits its first poll |
 | `apns_token` | string, nullable | |
 | `mdm_device_id` | string, nullable | non-null ⟺ paired via MDM — see "no `paired_via`" below |
 | `pairing_code` | string, nullable | 6 numeric digits, no leading zero (100000–999999) — typed by an admin from the TV screen, so short and remote-friendly over a large keyspace (see "Pairing code expiry" below for why that's safe) |
