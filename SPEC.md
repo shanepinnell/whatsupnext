@@ -619,7 +619,7 @@ the TV.
 | `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage |
 | `apns_token` | string, nullable | |
 | `mdm_device_id` | string, nullable | non-null ⟺ paired via MDM — see "no `paired_via`" below |
-| `pairing_code` | string, nullable | 6 numeric digits — typed by an admin from the TV screen, so short and remote-friendly over a large keyspace (see "Pairing code expiry" below for why that's safe) |
+| `pairing_code` | string, nullable | 6 numeric digits, no leading zero (100000–999999) — typed by an admin from the TV screen, so short and remote-friendly over a large keyspace (see "Pairing code expiry" below for why that's safe) |
 | `pairing_code_expires_at` | datetime, nullable | |
 | `paired_at` | datetime, nullable | covers both pairing paths (code or MDM) with one field |
 | `last_seen_at` | datetime, nullable | |
