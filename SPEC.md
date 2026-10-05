@@ -435,12 +435,15 @@ new ones freely, never rename or repurpose an existing one.
     no MDM config is present on this path.
   - `POST /devices/pairing_codes` with header
     `X-Device-Identifier: <device_identifier>` (the App's own UUID, see
-    `Device`), no body → issues a fresh code and returns
+    `Device`), and optional JSON body `{name}` (in the body, not a
+    header, since device names routinely contain non-ASCII characters)
+    → issues a fresh code and returns
     `{code, expires_at, poll_interval_seconds}`. Creates a pending
     `Device` if none exists for that `device_identifier`; otherwise
     reissues a new code on the existing pending one, so re-requests
     (e.g. the App refreshing a code before it expires) never accumulate
-    orphaned pending devices. `poll_interval_seconds` is 5.
+    orphaned pending devices. `poll_interval_seconds` is 5. Sets the
+    device's `name` on create and on each reissue.
     A `device_identifier` belonging to a paired or revoked device gets
     `409 Conflict` with `{error: "device_paired"}` or
     `{error: "device_revoked"}` respectively, and no code — un-pairing
@@ -642,6 +645,7 @@ the TV.
 | Field | Type | Notes |
 |---|---|---|
 | `device_identifier` | UUID | App-generated on first launch |
+| `name` | string, nullable | the Apple TV's own device name as reported by tvOS, sent by the App — never admin-edited. Not unique (several TVs may keep a default name); admin UI falls back to "Apple TV" when blank. Device lists sort by it, blank last |
 | `room_id` | FK, nullable | null until paired |
 | `status` | enum | `pending` / `paired` / `revoked` |
 | `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage. Generated at first `pairing_status` delivery, not at claim; `api_key_digest` present ⟺ delivered. Null while a claimed device awaits its first poll |
@@ -676,6 +680,9 @@ the TV.
   matches no pending unexpired device — or, via a generation race, more
   than one — is rejected as invalid; an ambiguous code never pairs
   either device.
+- **Device name after pairing**: a rename on the TV after pairing isn't
+  picked up yet — needs a post-pairing report (e.g. alongside
+  `push_token`).
 
 ### `LogEntry`
 
