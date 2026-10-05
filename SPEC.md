@@ -426,12 +426,8 @@ new ones freely, never rename or repurpose an existing one.
 
 Authenticated endpoints reject a request whose `api_key` doesn't
 authenticate with `401 Unauthorized` and `{error: "invalid_api_key"}`
-— including a key belonging to an unpaired (deleted) device. On that
-response the App discards its key and returns to the pairing flow. A
-key belonging to a revoked device gets `403 Forbidden` with
-`{error: "device_revoked"}`; the App shows a "this TV's access has been
-revoked — contact your admin" screen and stops polling, rather than
-re-pairing.
+— including a key belonging to a deleted device. On that response the
+App discards its key and returns to the pairing flow.
 
 - **Service address check (public, unauthenticated)**:
   - `GET /up` (outside `/api/v1/`) — Rails' built-in health check; `200`
@@ -454,10 +450,10 @@ re-pairing.
     orphaned pending devices. `poll_interval_seconds` is 5. Sets the
     device's `name` on create and on each reissue that
     includes it; a request without `name` leaves the existing one.
-    A `device_identifier` belonging to a paired or revoked device gets
-    `409 Conflict` with `{error: "device_paired"}` or
-    `{error: "device_revoked"}` respectively, and no code — un-pairing
-    is an admin action, never triggered by an unauthenticated request.
+    A `device_identifier` belonging to a paired device gets
+    `409 Conflict` with `{error: "device_paired"}` and no code —
+    deleting a device is an admin action, never triggered by an
+    unauthenticated request.
     A missing or blank `X-Device-Identifier` gets `400 Bad Request` with
     `{error: "missing_device_identifier"}`.
   - `GET /devices/pairing_status` with header
@@ -471,7 +467,7 @@ re-pairing.
     proxies/CDNs/Rails would write it to access logs, and (b) the
     `api_key` is delivered once, so a leaked identifier after delivery
     yields nothing. A device that loses that one response must be
-    un-paired and re-paired by an admin.
+    deleted and re-paired by an admin.
 - **Zero-Touch flow (public, token-based)**:
   - `POST /devices/mdm_register` — body `{mdm_token, device_identifier}`
     (from Managed App Configuration) → `{api_key, room: {...}}`
@@ -657,7 +653,7 @@ the TV.
 | `device_identifier` | UUID | App-generated on first launch |
 | `name` | string, required, default "Apple TV" | the Apple TV's own device name as reported by tvOS, sent by the App — never admin-edited. Defaults to "Apple TV" when the App sends none or a blank one. Not unique (several TVs may keep the default). Device lists sort by it |
 | `room_id` | FK, nullable | null until paired |
-| `status` | enum | `pending` / `paired` / `revoked` |
+| `status` | enum | `pending` / `paired` |
 | `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage. Generated at first `pairing_status` delivery, not at claim; `api_key_digest` present ⟺ delivered. Null while a claimed device awaits its first poll |
 | `apns_token` | string, nullable | |
 | `mdm_device_id` | string, nullable | non-null ⟺ paired via MDM — see "no `paired_via`" below |
@@ -690,23 +686,15 @@ the TV.
   matches no pending unexpired device — or, via a generation race, more
   than one — is rejected as invalid; an ambiguous code never pairs
   either device.
-- **Unpair vs. revoke** — two distinct admin actions on a paired or
-  revoked device, for two distinct intents:
-  - **Unpair** deletes the `Device` row. Its `api_key` stops
-    authenticating immediately (there's no row left to match). If that
-    TV asks for a pairing code again, its `device_identifier` is unknown,
-    so it's treated as brand new — fresh pending `Device`, fresh code,
-    pairable to any room. For "this TV is moving / start over".
-  - **Revoke** sets `status: revoked` and keeps the row (and its
-    `device_identifier`). Its `api_key` stops authenticating, and a
-    pairing-code request from it gets `409 device_revoked` (see API
-    contract) — it cannot re-pair until an admin unpairs it. For a
-    stolen, lost, or decommissioned TV.
-  - There's no separate "un-revoke": unpairing a revoked device is how
-    an admin lets it back in, and it then re-pairs like any new TV.
-    Pending devices aren't shown in the admin UI, so neither action
-    applies to them; abandoned pending devices are a cleanup-job
-    concern, not an admin one.
+- **Deleting a device** is the one admin action for removing a TV.
+  It deletes the `Device` row, so its `api_key` stops authenticating
+  immediately and the App returns to the pairing flow (see API
+  contract). Nothing stops that TV from requesting a new code, but a
+  code only pairs when an admin claims it, so a deleted TV — lost,
+  stolen, or decommissioned — can't get back in without an admin
+  deliberately re-pairing it. No separate "revoked" state: it would
+  add nothing that deletion plus admin-gated claiming doesn't already
+  give.
 - **Device name after pairing**: a rename on the TV after pairing isn't
   picked up yet — needs a post-pairing report (e.g. alongside
   `push_token`).
