@@ -443,7 +443,8 @@ new ones freely, never rename or repurpose an existing one.
     reissues a new code on the existing pending one, so re-requests
     (e.g. the App refreshing a code before it expires) never accumulate
     orphaned pending devices. `poll_interval_seconds` is 5. Sets the
-    device's `name` on create and on each reissue.
+    device's `name` on create and on each reissue that
+    includes it; a request without `name` leaves the existing one.
     A `device_identifier` belonging to a paired or revoked device gets
     `409 Conflict` with `{error: "device_paired"}` or
     `{error: "device_revoked"}` respectively, and no code — un-pairing
