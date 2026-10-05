@@ -427,10 +427,22 @@ everything else is under `/api/v1/`.
   - Precondition: the App already knows the Service's base URL —
     entered once on the TV (see MDM / device management above), since
     no MDM config is present on this path.
-  - `POST /devices/pairing_codes` → creates a pending `Device`, returns
-    `{device_id, code, expires_at, poll_interval_seconds}`.
-  - `GET /devices/:device_id/pairing_status` → `{status: "pending"}` until
-    claimed, then `{status: "paired", api_key, room: {...}}`.
+  - `POST /devices/pairing_codes` — body `{device_identifier}` (the
+    App's own UUID, see `Device`) → issues a fresh code and returns
+    `{code, expires_at, poll_interval_seconds}`. Creates a pending
+    `Device` if none exists for that `device_identifier`; otherwise
+    reissues a new code on the existing pending one, so re-requests
+    (e.g. the App refreshing a code before it expires) never accumulate
+    orphaned pending devices. `poll_interval_seconds` is 5.
+    A `device_identifier` belonging to a paired or revoked device gets
+    `409 Conflict` and no code — un-pairing is an admin action, never
+    triggered by an unauthenticated request.
+  - `GET /devices/:device_identifier/pairing_status` →
+    `{status: "pending"}` until claimed, then
+    `{status: "paired", api_key, room: {...}}`. Keyed on the App's
+    random UUID, never the sequential DB id: this endpoint is
+    unauthenticated and hands out the `api_key`, so its key must be
+    unguessable.
 - **Zero-Touch flow (public, token-based)**:
   - `POST /devices/mdm_register` — body `{mdm_token, device_identifier}`
     (from Managed App Configuration) → `{api_key, room: {...}}`
