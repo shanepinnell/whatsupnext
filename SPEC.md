@@ -445,6 +445,8 @@ new ones freely, never rename or repurpose an existing one.
     `409 Conflict` with `{error: "device_paired"}` or
     `{error: "device_revoked"}` respectively, and no code — un-pairing
     is an admin action, never triggered by an unauthenticated request.
+    A missing or blank `X-Device-Identifier` gets `400 Bad Request` with
+    `{error: "missing_device_identifier"}`.
   - `GET /devices/pairing_status` with header
     `X-Device-Identifier: <device_identifier>` → `{status: "pending"}`
     until claimed, then `{status: "paired", api_key, room: {...}}`
