@@ -142,6 +142,24 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   pairing-code screen. Every device works via pairing code regardless of
   MDM; MDM-managed devices get zero-touch as an upgrade on top of that,
   not a replacement for it.
+- **Decision: on the pairing-code path, the App asks for the Service
+  address first.** One Service instance = one organization, so "which
+  organization" is just "which server" — MDM supplies it via Managed
+  App Configuration, but a device without that has no other way to
+  learn it. On first launch with no managed config, the App shows a
+  one-time "Enter your WhatsUpNext address" screen, persists the
+  entered URL, and only then requests a pairing code from that
+  Service. HTTPS only; the App validates the address by fetching the
+  Service's public `GET /up` health check (Rails' built-in
+  `rails/health#show`) before moving on, so a typo surfaces
+  immediately rather than as a pairing code that never gets claimed.
+  The address can be changed later only by resetting the App's pairing
+  (an unpaired device), never silently.
+  - **Considered and rejected: a central lookup service mapping pairing
+    codes to instances** (so the TV never needs a URL typed). It's a new
+    permanent shared component in every deployment's critical path —
+    same reasoning as the rejected webhook relay above — and would make
+    every self-hosted install depend on infrastructure it doesn't run.
 - **AirPlay works alongside Single App Mode by default.** SAM and AirPlay
   are independent MDM controls — AirPlay is only blocked if an admin
   separately enables the "Disable AirPlay" restriction (supervised devices
@@ -398,9 +416,17 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 ## API contract (the App ↔ the Service)
 
 All authenticated endpoints use `Authorization: Bearer <api_key>`;
-everything is under `/api/v1/`.
+everything else is under `/api/v1/`.
 
+- **Service address check (public, unauthenticated)**:
+  - `GET /up` (outside `/api/v1/`) — Rails' built-in health check; `200`
+    when the Service is up. Used by the App to validate a typed-in
+    Service address before pairing (see MDM / device management above).
+    Part of the App ↔ Service contract — don't remove or move it.
 - **Pairing Code flow (public, unauthenticated)**:
+  - Precondition: the App already knows the Service's base URL —
+    entered once on the TV (see MDM / device management above), since
+    no MDM config is present on this path.
   - `POST /devices/pairing_codes` → creates a pending `Device`, returns
     `{device_id, code, expires_at, poll_interval_seconds}`.
   - `GET /devices/:device_id/pairing_status` → `{status: "pending"}` until
@@ -593,7 +619,7 @@ the TV.
 | `api_key` | string | stored hashed/digested, not plaintext — compared on every request but unrecoverable from a DB leak, same principle as password storage |
 | `apns_token` | string, nullable | |
 | `mdm_device_id` | string, nullable | non-null ⟺ paired via MDM — see "no `paired_via`" below |
-| `pairing_code` | string, nullable | |
+| `pairing_code` | string, nullable | 6 numeric digits — typed by an admin from the TV screen, so short and remote-friendly over a large keyspace (see "Pairing code expiry" below for why that's safe) |
 | `pairing_code_expires_at` | datetime, nullable | |
 | `paired_at` | datetime, nullable | covers both pairing paths (code or MDM) with one field |
 | `last_seen_at` | datetime, nullable | |
@@ -606,8 +632,8 @@ the TV.
 - **No `paired_via` field** — redundant with `mdm_device_id` presence:
   non-null means MDM, null means pairing code. Derive it from
   `mdm_device_id.present?` wherever needed.
-- **Pairing code expiry**: codes do expire (moderate window, ~15–30 min)
-  — mainly to bound the brute-force window on a short code and avoid
+- **Pairing code expiry**: codes expire 15 minutes after issue
+  (`pairing_code_expires_at`) — mainly to bound the brute-force window on a short code and avoid
   abandoned pending devices accumulating forever, not because the code
   alone is exploitable (claiming a device still requires valid OIDC admin
   auth). The App auto-requests a fresh code shortly before the current
