@@ -424,6 +424,15 @@ wording; never human-readable prose from the Service, and never a
 stack trace or validation dump. Codes are part of the contract: add
 new ones freely, never rename or repurpose an existing one.
 
+Authenticated endpoints reject a request whose `api_key` doesn't
+authenticate with `401 Unauthorized` and `{error: "invalid_api_key"}`
+— including a key belonging to an unpaired (deleted) device. On that
+response the App discards its key and returns to the pairing flow. A
+key belonging to a revoked device gets `403 Forbidden` with
+`{error: "device_revoked"}`; the App shows a "this TV's access has been
+revoked — contact your admin" screen and stops polling, rather than
+re-pairing.
+
 - **Service address check (public, unauthenticated)**:
   - `GET /up` (outside `/api/v1/`) — Rails' built-in health check; `200`
     when the Service is up. Used by the App to validate a typed-in
@@ -681,6 +690,23 @@ the TV.
   matches no pending unexpired device — or, via a generation race, more
   than one — is rejected as invalid; an ambiguous code never pairs
   either device.
+- **Unpair vs. revoke** — two distinct admin actions on a paired or
+  revoked device, for two distinct intents:
+  - **Unpair** deletes the `Device` row. Its `api_key` stops
+    authenticating immediately (there's no row left to match). If that
+    TV asks for a pairing code again, its `device_identifier` is unknown,
+    so it's treated as brand new — fresh pending `Device`, fresh code,
+    pairable to any room. For "this TV is moving / start over".
+  - **Revoke** sets `status: revoked` and keeps the row (and its
+    `device_identifier`). Its `api_key` stops authenticating, and a
+    pairing-code request from it gets `409 device_revoked` (see API
+    contract) — it cannot re-pair until an admin unpairs it. For a
+    stolen, lost, or decommissioned TV.
+  - There's no separate "un-revoke": unpairing a revoked device is how
+    an admin lets it back in, and it then re-pairs like any new TV.
+    Pending devices aren't shown in the admin UI, so neither action
+    applies to them; abandoned pending devices are a cleanup-job
+    concern, not an admin one.
 - **Device name after pairing**: a rename on the TV after pairing isn't
   picked up yet — needs a post-pairing report (e.g. alongside
   `push_token`).
