@@ -638,7 +638,8 @@ the TV.
   alone is exploitable (claiming a device still requires valid OIDC admin
   auth). The App auto-requests a fresh code shortly before the current
   one expires while still on the pairing screen, so whoever's setting it
-  up never sees an expiry error.
+  up never sees an expiry error. Unique among unexpired codes —
+  regenerated on collision.
 
 ### `LogEntry`
 
