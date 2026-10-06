@@ -86,6 +86,17 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 - **Tenancy**: single-tenant per running instance, always. No `Account`
   model, no billing code.
 
+### The App
+
+- **Platform**: tvOS, minimum **tvOS 26** — the newest version that
+  still runs on every Apple TV since 2015 (Apple TV HD and all Apple TV
+  4K generations). tvOS 27 dropped the Apple TV HD and the 1st-gen
+  Apple TV 4K; conference-room hardware is replaced slowly, so we don't
+  follow Apple's cutoff immediately. Those two models stay on tvOS 26.x,
+  which may no longer receive security updates — Apple has historically
+  only patched the current tvOS. Revisit the minimum once a specific
+  newer API justifies dropping hardware.
+
 ### Authentication (to the Service's admin UI)
 
 - **Mechanism**: OmniAuth + a generic **OpenID Connect** strategy (not
