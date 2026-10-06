@@ -521,6 +521,13 @@ App discards its key and returns to the pairing flow.
     `api_key` is delivered once, so a leaked identifier after delivery
     yields nothing. A device that loses that one response must be
     deleted and re-paired by an admin.
+    `room` here is just `{name}`, enough for the TV to confirm which
+    room it joined; everything else comes from `GET /rooms/current`.
+    A missing or blank `X-Device-Identifier` gets `400` with
+    `{error: "missing_device_identifier"}`; an identifier with no
+    `Device` (e.g. deleted by an admin mid-pairing) gets `404` with
+    `{error: "unknown_device"}`, and the App goes back to requesting a
+    fresh pairing code.
 - **Zero-Touch flow (public, token-based)**:
   - `POST /devices/mdm_register` — body `{mdm_token, device_identifier}`
     (from Managed App Configuration) → `{api_key, room: {...}}`
