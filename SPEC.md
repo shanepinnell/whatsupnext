@@ -500,8 +500,9 @@ App discards its key and returns to the pairing flow.
     device's `name` on create and on each reissue that
     includes it; a request without `name` leaves the existing one.
     The body may also carry any of the device-info fields of
-    `POST /devices/info`, recorded the same way, so the admin sees the
-    hardware and its support stage when claiming.
+    `POST /devices/info`, recorded the same way (including the `422`),
+    so the hardware and its support stage are known from the moment
+    the device is paired.
     A `device_identifier` belonging to a paired device gets
     `409 Conflict` with `{error: "device_paired"}` and no code —
     deleting a device is an admin action, never triggered by an
