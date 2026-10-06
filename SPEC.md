@@ -560,7 +560,7 @@ time.
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | |
-| `background_image` | ActiveStorage attachment | |
+| `background_image` | ActiveStorage attachment | JPEG, PNG or WebP, exactly 16:9, from 1920×1080 to 3840×2160 (Apple TV's full-screen image sizes at 1x/2x); non-conforming uploads are rejected |
 
 Every room belongs to a real `Floor` record — a single-story building
 still creates one real `Floor` (e.g. named "1") rather than a null
