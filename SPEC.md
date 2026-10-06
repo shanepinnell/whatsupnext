@@ -732,7 +732,7 @@ the TV.
 | `display_hdr` | boolean, nullable | |
 | `network` | enum, nullable | `ethernet` / `wifi` / `other` |
 | `info_reported_at` | datetime, nullable | last device-info report |
-| `support_risk_accepted_stage` | enum, nullable | latest support stage an admin accepted the risk for; stages only advance, so it covers that stage and earlier ones |
+| `support_risk_accepted_stage` | string, nullable | the support stage an admin accepted the risk for; covers only that exact stage — once the stage changes, the acceptance no longer applies. Never `supported` |
 | `support_risk_accepted_at` | datetime, nullable | |
 | `support_risk_accepted_by_id` | FK → `User`, nullable | |
 
