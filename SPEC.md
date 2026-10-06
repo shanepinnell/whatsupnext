@@ -88,14 +88,52 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 
 ### The App
 
-- **Platform**: tvOS, minimum **tvOS 26** — the newest version that
-  still runs on every Apple TV since 2015 (Apple TV HD and all Apple TV
-  4K generations). tvOS 27 dropped the Apple TV HD and the 1st-gen
-  Apple TV 4K; conference-room hardware is replaced slowly, so we don't
-  follow Apple's cutoff immediately. Those two models stay on tvOS 26.x,
-  which may no longer receive security updates — Apple has historically
-  only patched the current tvOS. Revisit the minimum once a specific
-  newer API justifies dropping hardware.
+- **Platform**: tvOS. Minimum is the oldest tvOS major still running on
+  supported hardware — currently **tvOS 26**, until the Apple TV HD and
+  1st-gen Apple TV 4K reach end of support on 2027-03-14 (see "Apple TV
+  support policy" below).
+
+### Apple TV support policy
+
+- **Decision: we don't support Apple TV hardware that no longer gets
+  security updates.** Proxy for "gets security updates": the model can
+  run the newest released major tvOS. Apple publishes no end-of-support
+  dates and has historically only patched the current tvOS, so "dropped
+  by the current major" is the only deterministic signal.
+- **Stages** (derived, never stored — computed from the device's
+  reported `model_identifier` and the catalog below):
+  - `supported`
+  - `losing_support` — Apple has announced (WWDC, June) a tvOS major that
+    drops this model, but it hasn't shipped yet
+  - `deprecated` — that tvOS has shipped; support ends 6 months after
+    its release date
+  - `unsupported` — past that date
+
+  An unrecognized model identifier (e.g. hardware newer than the
+  catalog), or a device that hasn't reported one yet, is `supported`.
+- **Unsupported devices are blocked unless an admin accepts the risk.**
+  `GET /rooms/current` returns `403` with `{error: "unsupported_device"}`;
+  the App shows a "this Apple TV is no longer supported" screen and
+  keeps polling, so it recovers as soon as an admin accepts.
+  `losing_support` and `deprecated` only warn, never block.
+- **Accepting the risk is per device and per stage**, in the admin UI
+  only — never on the TV, whose remote is open to anyone in the room.
+  Accepting dismisses that stage's warning; accepting `unsupported` also
+  lifts the block. An earlier stage's acceptance doesn't carry over to a
+  later one, so an admin always confirms at the cutoff itself. Who
+  accepted and when is shown on the device page.
+- **Outdated tvOS on supported hardware** (e.g. an Apple TV 4K 3rd gen
+  still on tvOS 26.x after tvOS 27 ships) gets an "update tvOS" warning
+  only — never deprecated or blocked, since the admin can fix it.
+- **The catalog ships in the Service's code** — model identifier →
+  marketing name and last supported tvOS major, plus each tvOS major's
+  release date. Apple has no API for this. It's updated by a Service
+  release twice a year: after WWDC (adds the next major and the models
+  it drops → `losing_support`), and after the September release (adds
+  its release date → `deprecated`). The 6-month clock runs from Apple's
+  release date, not from when an instance installs the update. The
+  policy only advances on instances that install these releases — one
+  more reason self-hosters need to keep the Service updated.
 
 ### Authentication (to the Service's admin UI)
 
@@ -461,6 +499,9 @@ App discards its key and returns to the pairing flow.
     orphaned pending devices. `poll_interval_seconds` is 5. Sets the
     device's `name` on create and on each reissue that
     includes it; a request without `name` leaves the existing one.
+    The body may also carry any of the device-info fields of
+    `POST /devices/info`, recorded the same way, so the admin sees the
+    hardware and its support stage when claiming.
     A `device_identifier` belonging to a paired device gets
     `409 Conflict` with `{error: "device_paired"}` and no code —
     deleting a device is an admin action, never triggered by an
@@ -492,8 +533,18 @@ App discards its key and returns to the pairing flow.
     avoids retransmitting a sensitive token on every poll once the App
     already has it. Doubles as the heartbeat (`last_seen_at`). **Does
     not** carry emergency alert data (APNs-only, see above).
+    Returns `403` with `{error: "unsupported_device"}` for an
+    `unsupported` device whose risk hasn't been accepted (see Apple TV
+    support policy).
   - `POST /devices/push_token` — registers/updates the App's APNs device
     token; called at launch and whenever the token rotates.
+  - `POST /devices/info` — the App reports its device name and
+    hardware/software details at launch and on every return to the
+    foreground (an OS or App update always means a relaunch). Body:
+    `{name, model_identifier, os_version, app_version, display: {width,
+    height, hdr}, network}`, `network` one of `ethernet` / `wifi` /
+    `other`. Every key optional; an omitted key leaves the stored value.
+    Never blocked by the support policy.
   - `POST /calendar_sources/sync_status` — the App reports the outcome of
     its own most recent calendar poll (per Option A, only the App can
     actually observe this) for its paired room's `CalendarSource`. Body:
@@ -672,6 +723,16 @@ the TV.
 | `pairing_code_expires_at` | datetime, nullable | |
 | `paired_at` | datetime, nullable | covers both pairing paths (code or MDM) with one field |
 | `last_seen_at` | datetime, nullable | |
+| `model_identifier` | string, nullable | hardware model as reported by the App, e.g. `AppleTV14,1`; mapped to a marketing name by the support catalog |
+| `os_version` | string, nullable | e.g. `27.0` |
+| `app_version` | string, nullable | e.g. `1.0 (42)` |
+| `display_width` / `display_height` | integer, nullable | current output resolution, e.g. 3840×2160 |
+| `display_hdr` | boolean, nullable | |
+| `network` | enum, nullable | `ethernet` / `wifi` / `other` |
+| `info_reported_at` | datetime, nullable | last device-info report |
+| `support_risk_accepted_stage` | enum, nullable | latest support stage an admin accepted the risk for; stages only advance, so it covers that stage and earlier ones |
+| `support_risk_accepted_at` | datetime, nullable | |
+| `support_risk_accepted_by_id` | FK → `User`, nullable | |
 
 - **No separate `PairingCode` model** — folded into `Device` as columns.
   A device only ever has one active code at a time, and `paired_at`
@@ -706,9 +767,8 @@ the TV.
   deliberately re-pairing it. No separate "revoked" state: it would
   add nothing that deletion plus admin-gated claiming doesn't already
   give.
-- **Device name after pairing**: a rename on the TV after pairing isn't
-  picked up yet — needs a post-pairing report (e.g. alongside
-  `push_token`).
+- **Device name after pairing**: picked up by `POST /devices/info`,
+  which the App sends at every launch and return to the foreground.
 
 ### `LogEntry`
 
