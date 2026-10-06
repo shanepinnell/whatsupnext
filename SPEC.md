@@ -544,6 +544,8 @@ App discards its key and returns to the pairing flow.
     `{name, model_identifier, os_version, app_version, display: {width,
     height, hdr}, network}`, `network` one of `ethernet` / `wifi` /
     `other`. Every key optional; an omitted key leaves the stored value.
+    An unrecognized `network` value gets `422 Unprocessable Content`
+    with `{error: "invalid_device_info"}`, and nothing is recorded.
     Never blocked by the support policy.
   - `POST /calendar_sources/sync_status` — the App reports the outcome of
     its own most recent calendar poll (per Option A, only the App can
