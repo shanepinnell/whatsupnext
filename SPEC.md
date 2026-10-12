@@ -596,6 +596,7 @@ only) stays name-only by design, to keep first-run setup minimal.
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | a collection of buildings |
+| `timezone` | string | IANA identifier (e.g. `America/Chicago`) — lives here, not on `Building` or `Room`: a site's buildings are never in different timezones, so one setting per site avoids repeating it per building and risking two buildings on the same site drifting to different zones |
 
 Unique on `organization_id` + `name` — same normalization rationale as
 `Floor` (see below): buildings need to reference the *same* site
@@ -607,7 +608,6 @@ would be a real ambiguity, not just cosmetic.
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | |
-| `timezone` | string | IANA identifier (e.g. `America/Chicago`) — lives here, not on `Room`: all rooms in one physical building share a timezone, so per-room would risk two rooms in the same building drifting to different zones |
 
 Unique on `site_id` + `name` — same normalization rationale as `Floor`
 (see below): floors need to reference the *same* building consistently.
