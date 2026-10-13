@@ -341,8 +341,8 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 
 - **The threat model worth naming explicitly**: `CalendarSource.config`
   (the OAuth refresh token) is `encrypts`-protected at rest, but the
-  Service actively decrypts and transmits it to the App on every
-  `credential_version` mismatch — it isn't just encrypted and forgotten.
+  Service actively decrypts and transmits it to the App whenever its
+  `credential_digest` changes — it isn't just encrypted and forgotten.
   So anyone with **runtime** access to the running Service (container
   shell, a code-execution vulnerability, SSH to the host) has the same
   decryption capability the app itself has; at-rest encryption only
@@ -374,9 +374,9 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   or all-at-once, for a suspected full compromise) — calls the
   provider's token revocation endpoint (Google: direct
   `oauth2.googleapis.com/revoke` call; Microsoft: coarser, effectively
-  pulling the app's consent grant), clears the room's `config`, bumps
-  `credential_version` so the App stops using its cached copy, and
-  records a `calendar_credential_revoked` `LogEntry`. This is the actual
+  pulling the app's consent grant), clears the room's `config` — which
+  changes its `credential_digest`, so the App's next poll refetches and
+  stops using its cached copy — and records a `calendar_credential_revoked` `LogEntry`. This is the actual
   backstop once the threat model above is accepted: no amount of
   at-rest encryption prevents a fully-compromised host from reading a
   secret the app itself must be able to use — revoking at the provider
@@ -539,28 +539,38 @@ App discards its key and returns to the pairing flow.
     immediately, no polling.
 - **Ongoing operation (authenticated)**:
   - `GET /device/room` — the main 1-minute baseline poll. Returns room
-    name/timezone/background image, and calendar source config (enough
-    for the App to poll the provider directly, per Option A). Calendar
-    credentials (refresh token) are only included when a
-    `credential_version` the App sends back doesn't match current —
-    avoids retransmitting a sensitive token on every poll once the App
-    already has it. Doubles as the heartbeat (`last_seen_at`), updated
-    on every authenticated poll — including blocked ones below, so a
-    blocked TV still shows as online. **Does not** carry emergency alert
-    data (APNs-only, see above).
-    Response: `{room: {name, timezone, background_image_url}}`
-    (`timezone` is the room's site's IANA zone). `background_image_url`
-    is `null` when the room has none; otherwise an Active Storage URL
-    that redirects to the file. It isn't behind the `api_key` — anyone
-    with the URL can fetch the image, accepted since it's the picture
-    already on display in the room — and it changes only when the image
-    is replaced, so the App caches the download by URL instead of
-    refetching it every poll. Calendar source fields are added
-    alongside as they're built.
+    name/timezone/background image and a summary of its calendar
+    source — never the credentials themselves, which come from
+    `GET /device/room/calendar_source` below. Doubles as the heartbeat
+    (`last_seen_at`), updated on every authenticated poll — including
+    blocked ones below, so a blocked TV still shows as online. **Does
+    not** carry emergency alert data (APNs-only, see above).
+    Response: `{room: {name, timezone, background_image_url,
+    calendar_source}}` (`timezone` is the room's site's IANA zone).
+    `background_image_url` is `null` when the room has none; otherwise
+    an Active Storage URL that redirects to the file. It isn't behind
+    the `api_key` — anyone with the URL can fetch the image, accepted
+    since it's the picture already on display in the room — and it
+    changes only when the image is replaced, so the App caches the
+    download by URL instead of refetching it every poll.
+    `calendar_source` is `{provider, credential_digest}`, or `null` when
+    the room has no calendar (the App then discards any credentials it
+    holds). The App keeps the digest alongside its stored credentials
+    and calls `GET /device/room/calendar_source` only when they differ,
+    so the secret isn't retransmitted on every poll.
     Returns `403` with `{error: "unsupported_device"}` for an
     `unsupported` device whose risk hasn't been accepted (see Apple TV
     support policy). A missing or unknown api key gets `401` with
     `{error: "invalid_api_key"}`.
+  - `GET /device/room/calendar_source` — the room's calendar
+    credentials, fetched only when `device/room`'s `credential_digest`
+    differs from the App's stored one. Response: `{provider,
+    credential_digest, config}`, `config` being `{calendar_id,
+    refresh_token}` for Google/Microsoft or `{url}` for ICS; the App
+    stores `config` in the Keychain alongside the digest. A room with no
+    calendar gets `404` with `{error: "no_calendar_source"}`. Same `401`
+    and `403 unsupported_device` as `device/room` — a blocked TV can't
+    fetch credentials either. Not a heartbeat.
   - `POST /device/push_token` — registers/updates the App's APNs device
     token; called at launch and whenever the token rotates.
   - `PATCH /device` — the App reports its device name and
@@ -696,8 +706,8 @@ TV has to actually re-authenticate regardless of import.
 | Field | Type | Notes |
 |---|---|---|
 | `provider` | enum | `google` / `microsoft` / `ics` |
-| `config` | encrypted (Rails 8 `encrypts`) | refresh token + calendar ID for Google/Microsoft; just the URL for ICS |
-| `credential_version` | integer | bumped on change; matches the `device/room` field the App compares to know when to refetch |
+| `config` | encrypted (Rails 8 `encrypts`) | `{calendar_id, refresh_token}` for Google/Microsoft; `{url}` for ICS |
+| `credential_digest` | derived, not a column | HMAC of `config` (keys sorted), keyed from the app's secret key base. Sent on every `device/room` poll so the App knows when to refetch credentials. Derived rather than a stored counter so it can't repeat — a counter would restart at 0 if a source were deleted and recreated, leaving a TV on stale credentials — and an HMAC rather than a plain hash so the digest reveals nothing about the token |
 | `webhook_subscription_id` | string, nullable | Google/Microsoft webhook subscriptions expire and need periodic renewal by a background job |
 | `webhook_expires_at` | datetime, nullable | see above |
 | `last_reported_at` | datetime, nullable | updated on *every* report to `POST /calendar_sources/sync_status`, success or failure — the true heartbeat, mirroring `Device.last_seen_at`. When the current status (from the most recent `calendar_sync` `LogEntry`) is `ok`, this doubles as the exact last-successful-sync time, since the most recent report must have been the success that produced that status. No separate `last_synced_at` column — it would just be another copy of information already recoverable from `last_reported_at` plus the transition log |
@@ -859,6 +869,11 @@ paired `Device`.
   credentials model itself (an `EmergencyNotificationSource`-type model —
   not yet designed even for InformaCast; `LogEntry` only covers recording
   the alert event, not how the Service authenticates to the vendor).
+- How the App obtains the Google/Microsoft OAuth client ID (and secret,
+  if the provider requires one for refresh) it needs to exchange the
+  `refresh_token` from `GET /device/room/calendar_source` for access
+  tokens under Option A — built into the App, or delivered by the
+  Service alongside `config`.
 
 ## Repository layout
 
