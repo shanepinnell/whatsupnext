@@ -548,9 +548,15 @@ App discards its key and returns to the pairing flow.
     on every authenticated poll — including blocked ones below, so a
     blocked TV still shows as online. **Does not** carry emergency alert
     data (APNs-only, see above).
-    Response: `{room: {name, timezone}}` (`timezone` is the room's
-    site's IANA zone); background image and calendar source fields
-    are added alongside as they're built.
+    Response: `{room: {name, timezone, background_image_url}}`
+    (`timezone` is the room's site's IANA zone). `background_image_url`
+    is `null` when the room has none; otherwise an Active Storage URL
+    that redirects to the file. It isn't behind the `api_key` — anyone
+    with the URL can fetch the image, accepted since it's the picture
+    already on display in the room — and it changes only when the image
+    is replaced, so the App caches the download by URL instead of
+    refetching it every poll. Calendar source fields are added
+    alongside as they're built.
     Returns `403` with `{error: "unsupported_device"}` for an
     `unsupported` device whose risk hasn't been accepted (see Apple TV
     support policy). A missing or unknown api key gets `401` with
