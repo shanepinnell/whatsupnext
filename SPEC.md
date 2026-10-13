@@ -112,7 +112,7 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   An unrecognized model identifier (e.g. hardware newer than the
   catalog), or a device that hasn't reported one yet, is `supported`.
 - **Unsupported devices are blocked unless an admin accepts the risk.**
-  `GET /rooms/current` returns `403` with `{error: "unsupported_device"}`;
+  `GET /device/room` returns `403` with `{error: "unsupported_device"}`;
   the App shows a "this Apple TV is no longer supported" screen and
   keeps polling, so it recovers as soon as an admin accepts.
   `losing_support` and `deprecated` only warn, never block.
@@ -435,7 +435,7 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
   high-priority **alert-type** APNs push (not the low-priority
   `content-available` silent push used for calendar nudges, which the OS
   can throttle). Considered and rejected adding emergency status to the
-  `rooms/current` poll as a reconciliation floor: APNs is technically
+  `device/room` poll as a reconciliation floor: APNs is technically
   best-effort, not guaranteed, so a poll fallback would close a real (if
   rare) gap — but a second delivery path means reconciliation logic and
   race conditions to get right, and for safety-critical software, an
@@ -467,6 +467,11 @@ under — no tenancy, billing, or SaaS-related code exists in it at all.
 All authenticated endpoints use `Authorization: Bearer <api_key>`;
 everything else is under `/api/v1/`.
 
+Device endpoints are singular or plural by what they refer to:
+`/device/...` is the calling device itself, identified by its
+`api_key`; `/devices/...` addresses devices generally — creating one,
+or looking one up by `device_identifier`.
+
 Error responses carry a JSON body `{error: "<code>"}` — a stable,
 machine-readable snake_case code the App maps to its own on-screen
 wording; never human-readable prose from the Service, and never a
@@ -487,7 +492,7 @@ App discards its key and returns to the pairing flow.
   - Precondition: the App already knows the Service's base URL —
     entered once on the TV (see MDM / device management above), since
     no MDM config is present on this path.
-  - `POST /devices/pairing_codes` with header
+  - `POST /devices` with header
     `X-Device-Identifier: <device_identifier>` (the App's own UUID, see
     `Device`), and optional JSON body `{name}` (in the body, not a
     header, since device names routinely contain non-ASCII characters)
@@ -500,7 +505,7 @@ App discards its key and returns to the pairing flow.
     device's `name` on create and on each reissue that
     includes it; a request without `name` leaves the existing one.
     The body may also carry any of the device-info fields of
-    `POST /devices/info`, recorded the same way (including the `422`),
+    `PATCH /device`, recorded the same way (including the `422`),
     so the hardware and its support stage are known from the moment
     the device is paired.
     A `device_identifier` belonging to a paired device gets
@@ -522,7 +527,7 @@ App discards its key and returns to the pairing flow.
     yields nothing. A device that loses that one response must be
     deleted and re-paired by an admin.
     `room` here is just `{name}`, enough for the TV to confirm which
-    room it joined; everything else comes from `GET /rooms/current`.
+    room it joined; everything else comes from `GET /device/room`.
     A missing or blank `X-Device-Identifier` gets `400` with
     `{error: "missing_device_identifier"}`; an identifier with no
     `Device` (e.g. deleted by an admin mid-pairing) gets `404` with
@@ -533,20 +538,26 @@ App discards its key and returns to the pairing flow.
     (from Managed App Configuration) → `{api_key, room: {...}}`
     immediately, no polling.
 - **Ongoing operation (authenticated)**:
-  - `GET /rooms/current` — the main 1-minute baseline poll. Returns room
+  - `GET /device/room` — the main 1-minute baseline poll. Returns room
     name/timezone/background image, and calendar source config (enough
     for the App to poll the provider directly, per Option A). Calendar
     credentials (refresh token) are only included when a
     `credential_version` the App sends back doesn't match current —
     avoids retransmitting a sensitive token on every poll once the App
-    already has it. Doubles as the heartbeat (`last_seen_at`). **Does
-    not** carry emergency alert data (APNs-only, see above).
+    already has it. Doubles as the heartbeat (`last_seen_at`), updated
+    on every authenticated poll — including blocked ones below, so a
+    blocked TV still shows as online. **Does not** carry emergency alert
+    data (APNs-only, see above).
+    Response: `{room: {name, timezone}}` (`timezone` is the room's
+    site's IANA zone); background image and calendar source fields
+    are added alongside as they're built.
     Returns `403` with `{error: "unsupported_device"}` for an
     `unsupported` device whose risk hasn't been accepted (see Apple TV
-    support policy).
-  - `POST /devices/push_token` — registers/updates the App's APNs device
+    support policy). A missing or unknown api key gets `401` with
+    `{error: "invalid_api_key"}`.
+  - `POST /device/push_token` — registers/updates the App's APNs device
     token; called at launch and whenever the token rotates.
-  - `POST /devices/info` — the App reports its device name and
+  - `PATCH /device` — the App reports its device name and
     hardware/software details at launch and on every return to the
     foreground (an OS or App update always means a relaunch). Body:
     `{name, model_identifier, os_version, app_version, display: {width,
@@ -680,7 +691,7 @@ TV has to actually re-authenticate regardless of import.
 |---|---|---|
 | `provider` | enum | `google` / `microsoft` / `ics` |
 | `config` | encrypted (Rails 8 `encrypts`) | refresh token + calendar ID for Google/Microsoft; just the URL for ICS |
-| `credential_version` | integer | bumped on change; matches the `rooms/current` field the App compares to know when to refetch |
+| `credential_version` | integer | bumped on change; matches the `device/room` field the App compares to know when to refetch |
 | `webhook_subscription_id` | string, nullable | Google/Microsoft webhook subscriptions expire and need periodic renewal by a background job |
 | `webhook_expires_at` | datetime, nullable | see above |
 | `last_reported_at` | datetime, nullable | updated on *every* report to `POST /calendar_sources/sync_status`, success or failure — the true heartbeat, mirroring `Device.last_seen_at`. When the current status (from the most recent `calendar_sync` `LogEntry`) is `ok`, this doubles as the exact last-successful-sync time, since the most recent report must have been the success that produced that status. No separate `last_synced_at` column — it would just be another copy of information already recoverable from `last_reported_at` plus the transition log |
@@ -777,7 +788,7 @@ the TV.
   deliberately re-pairing it. No separate "revoked" state: it would
   add nothing that deletion plus admin-gated claiming doesn't already
   give.
-- **Device name after pairing**: picked up by `POST /devices/info`,
+- **Device name after pairing**: picked up by `PATCH /device`,
   which the App sends at every launch and return to the foreground.
 
 ### `LogEntry`
